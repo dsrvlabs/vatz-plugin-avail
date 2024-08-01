@@ -56,39 +56,38 @@ func main() {
 
 func pluginFeature(info, option map[string]*structpb.Value) (sdk.CallResponse, error) {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
-	cmd := "curl -s " + target + ":9615/metrics | grep -e ^substrate_block_height{status=\"finalized\","
+	cmd := "curl -s " + target + ":9615/metrics | grep -e ^substrate_block_height{status=\\\"finalized\\\","
 	cmdOutput, err := runCommand(cmd)
-
 	if err != nil {
-		log.Error().Str(methodName, "Fail to get sealed_height").Msg(pluginName)
+		log.Error().Str(methodName, "Fail to get block_height").Msg(pluginName)
 		return createResponse(pluginpb.STATE_FAILURE, pluginpb.SEVERITY_ERROR, "Fail to get block height due to runCMD"), nil
 	}
+
 	bHeightCurrent := strings.Split(cmdOutput, " ")
+
 	if len(bHeightCurrent) < 2 {
 		log.Error().Str(methodName, "Unexpected format from block height command output").Msg(pluginName)
-		return createResponse(pluginpb.STATE_FAILURE, pluginpb.SEVERITY_ERROR, "Unexpected format from sealed height command output"), nil
+		return createResponse(pluginpb.STATE_FAILURE, pluginpb.SEVERITY_ERROR, "Unexpected format from block height command output"), nil
 	}
 
-	BHValFloat, errParse := strconv.ParseFloat(bHeightCurrent[1], 64)
+	BHValInt, errParse := strconv.Atoi(bHeightCurrent[1])
 	if errParse != nil {
 		log.Error().Str(methodName, "Parsing Error from Current BlockHeight").Msg(pluginName)
-		return createResponse(pluginpb.STATE_FAILURE, pluginpb.SEVERITY_ERROR, "Parsing Error from Current sealedHeight"), nil
+		return createResponse(pluginpb.STATE_FAILURE, pluginpb.SEVERITY_ERROR, "Parsing Error from Current BlockHeight"), nil
 	}
 
 	var contentMSG string
 	severity := pluginpb.SEVERITY_INFO
-	BHValInt := int(BHValFloat)
-
 	if preBlockHeight == -1 {
 		preBlockHeight = BHValInt
-		contentMSG = "Checking First value of Sealed Height"
+		contentMSG = "Checking First value of Block Height"
 	} else {
 		diff := BHValInt - preBlockHeight
 		if diff < 1 {
 			severity = pluginpb.SEVERITY_CRITICAL
 			contentMSG = fmt.Sprintf("Block Height's increase has halted for the moment by (%d) > %d | %d", diff, preBlockHeight, BHValInt)
 		} else if diff < blockDiff {
-			severity = pluginpb.SEVERITY_ERROR
+			severity = pluginpb.SEVERITY_WARNING
 			contentMSG = fmt.Sprintf("Block Height is NOT increasing for the moment by (%d) > %d | %d", diff, preBlockHeight, BHValInt)
 		} else {
 			contentMSG = fmt.Sprintf("Block Height is increasing by (%d) from %d To %d", diff, preBlockHeight, BHValInt)
